@@ -61,6 +61,11 @@ workspace = true
 [features]
 bench = []
 testing = []
+experimental-dictionary-hash = []
+
+[[bench]]
+name = "attribute_hash"
+harness = false
 
 [[bench]]
 name = "concatenate"

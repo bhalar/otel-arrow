@@ -41,7 +41,12 @@ use crate::proto::opentelemetry::arrow::v1::ArrowPayloadType;
 use crate::schema::consts::{self, metadata};
 use crate::schema::{get_field_metadata, update_field_metadata};
 
+#[cfg(feature = "experimental-dictionary-hash")]
+use self::dictionary_hash::DictionaryHashCache;
+
 pub mod concatenate;
+#[cfg(feature = "experimental-dictionary-hash")]
+mod dictionary_hash;
 pub mod reindex;
 pub mod sanitize;
 pub mod split;
@@ -3834,6 +3839,10 @@ fn apply_inserts_upserts_and_updates<T: ArrowPrimitiveType>(
 
             let mut salted_hasher = Sha256::new();
             salted_hasher.update(&hash_spec.salt);
+            #[cfg(feature = "experimental-dictionary-hash")]
+            let mut hash_cache = attrs_record_batch
+                .column_by_name(consts::ATTRIBUTE_STR)
+                .and_then(DictionaryHashCache::new);
             let mut hashed_values =
                 StringBuilder::with_capacity(parent_ids.len(), parent_ids.len() * 64);
             for row in BitIndexIterator::new(
@@ -3841,6 +3850,12 @@ fn apply_inserts_upserts_and_updates<T: ArrowPrimitiveType>(
                 hashable_key_mask.offset(),
                 hashable_key_mask.len(),
             ) {
+                #[cfg(feature = "experimental-dictionary-hash")]
+                if let Some(cache) = &mut hash_cache
+                    && cache.append(&mut hashed_values, &any_value_arrays, row, &salted_hasher)
+                {
+                    continue;
+                }
                 append_hashed_scalar_value(
                     &mut hashed_values,
                     &any_value_arrays,
